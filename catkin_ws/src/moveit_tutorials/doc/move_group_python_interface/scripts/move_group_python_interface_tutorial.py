@@ -147,12 +147,12 @@ class MoveGroupPythonInterfaceTutorial(object):
         # We get the joint values from the group and change some of the values:
         joint_goal = move_group.get_current_joint_values()
         joint_goal[0] = 0
-        joint_goal[1] = -tau / 8
+        joint_goal[1] = 0
         joint_goal[2] = 0
-        joint_goal[3] = -tau / 4
+        joint_goal[3] = -1.57
         joint_goal[4] = 0
-        joint_goal[5] = tau / 6  # 1/6 of a turn
-        joint_goal[6] = 0
+        joint_goal[5] = 1.57
+        joint_goal[6] = 0.785
 
         # The go command can be called with joint values, poses, or without any
         # parameters if you have already set the pose or joint target for the group
@@ -181,8 +181,6 @@ class MoveGroupPythonInterfaceTutorial(object):
         ## end-effector:
         pose_goal = self.goal
 
-        print(pose_goal)
-
         move_group.set_pose_target(pose_goal)
         ## Now, we call the planner to compute the plan and execute it.
         # `go()` returns a boolean indicating whether the planning and execution was successful.
@@ -200,91 +198,6 @@ class MoveGroupPythonInterfaceTutorial(object):
         # we use the class variable rather than the copied state variable
         current_pose = self.move_group.get_current_pose().pose
         return all_close(pose_goal, current_pose, 0.01)
-
-    def plan_cartesian_path(self, scale=1):
-        # Copy class variables to local variables to make the web tutorials more clear.
-        # In practice, you should use the class variables directly unless you have a good
-        # reason not to.
-        move_group = self.move_group
-
-        ## BEGIN_SUB_TUTORIAL plan_cartesian_path
-        ##
-        ## Cartesian Paths
-        ## ^^^^^^^^^^^^^^^
-        ## You can plan a Cartesian path directly by specifying a list of waypoints
-        ## for the end-effector to go through. If executing  interactively in a
-        ## Python shell, set scale = 1.0.
-        ##
-        waypoints = []
-
-        wpose = move_group.get_current_pose().pose
-        wpose.position.z -= scale * 0.1  # First move up (z)
-        wpose.position.y += scale * 0.2  # and sideways (y)
-        waypoints.append(copy.deepcopy(wpose))
-
-        wpose.position.x += scale * 0.1  # Second move forward/backwards in (x)
-        waypoints.append(copy.deepcopy(wpose))
-
-        wpose.position.y -= scale * 0.1  # Third move sideways (y)
-        waypoints.append(copy.deepcopy(wpose))
-
-        # We want the Cartesian path to be interpolated at a resolution of 1 cm
-        # which is why we will specify 0.01 as the eef_step in Cartesian
-        # translation.  We will disable the jump threshold by setting it to 0.0,
-        # ignoring the check for infeasible jumps in joint space, which is sufficient
-        # for this tutorial.
-        (plan, fraction) = move_group.compute_cartesian_path(
-            waypoints, 0.01, 0.0  # waypoints to follow  # eef_step
-        )  # jump_threshold
-
-        # Note: We are just planning, not asking move_group to actually move the robot yet:
-        return plan, fraction
-
-        ## END_SUB_TUTORIAL
-
-    def display_trajectory(self, plan):
-        # Copy class variables to local variables to make the web tutorials more clear.
-        # In practice, you should use the class variables directly unless you have a good
-        # reason not to.
-        robot = self.robot
-        display_trajectory_publisher = self.display_trajectory_publisher
-
-        ## BEGIN_SUB_TUTORIAL display_trajectory
-        ##
-        ## Displaying a Trajectory
-        ## ^^^^^^^^^^^^^^^^^^^^^^^
-        ## You can ask RViz to visualize a plan (aka trajectory) for you. But the
-        ## group.plan() method does this automatically so this is not that useful
-        ## here (it just displays the same trajectory again):
-        ##
-        ## A `DisplayTrajectory`_ msg has two primary fields, trajectory_start and trajectory.
-        ## We populate the trajectory_start with our current robot state to copy over
-        ## any AttachedCollisionObjects and add our plan to the trajectory.
-        display_trajectory = moveit_msgs.msg.DisplayTrajectory()
-        display_trajectory.trajectory_start = robot.get_current_state()
-        display_trajectory.trajectory.append(plan)
-        # Publish
-        display_trajectory_publisher.publish(display_trajectory)
-
-        ## END_SUB_TUTORIAL
-
-    def execute_plan(self, plan):
-        # Copy class variables to local variables to make the web tutorials more clear.
-        # In practice, you should use the class variables directly unless you have a good
-        # reason not to.
-        move_group = self.move_group
-
-        ## BEGIN_SUB_TUTORIAL execute_plan
-        ##
-        ## Executing a Plan
-        ## ^^^^^^^^^^^^^^^^
-        ## Use execute if you would like the robot to follow
-        ## the plan that has already been computed:
-        move_group.execute(plan, wait=True)
-
-        ## **Note:** The robot's current joint state must be within some tolerance of the
-        ## first waypoint in the `RobotTrajectory`_ or ``execute()`` will fail
-        ## END_SUB_TUTORIAL
 
     def wait_for_state_update(
         self, box_is_known=False, box_is_attached=False, timeout=4
@@ -408,25 +321,36 @@ class MoveGroupPythonInterfaceTutorial(object):
 
 def main():
     try:
+        # Box Codes
+        red_counter = 1
+        blue_counter = 1
+        green_counter = 1
+        # Preset positions for the robot
+        presets = {
+            "home": [0.5, 0, 0.5],
+            "b_bin": [0, 0.5, 0.3],
+            "g_bin": [-0.5, 0, 0.3],
+            "r_bin": [0, -0.5, 0.3],
+        }
+
+        red_boxes = {
+            1: ["R1", [0.4, 0.3, 0.4]],
+            2: ["R2", [0.6, 0, 0.4]],
+        }
+
+        green_boxes = {
+            1: ["G1", [0.4, 0, 0.4]],
+            2: ["G2", [0.6, -0.3, 0.4]],
+        }
+
+        blue_boxes = {
+            1: ["B1", [0.4, -0.3, 0.4]],
+            2: ["B2", [0.6, 0.3, 0.4]],
+        }
+
+        tutorial = MoveGroupPythonInterfaceTutorial()
+
         while(True):
-            # Box Codes
-            red_counter = 1
-            blue_counter = 1
-            green_counter = 1
-
-            red_boxes = {
-                1: ["R1", [0.5, 0.5, 0.4]],
-            }
-
-            green_boxes = {
-                1: ["G1", [0.5, 0, 0.4]],
-            }
-
-            blue_boxes = {
-                1: ["B1", [0.5, -0.5, 0.4]],
-            }
-
-            tutorial = MoveGroupPythonInterfaceTutorial()
 
             box_name = input("============ Type the colour of the box you want to pick (R,G,B) ...")
             box_position = []
@@ -453,16 +377,42 @@ def main():
             tutorial.go_to_pose_goal()
             tutorial.attach_box()
 
+            # Ask the user which bin to place the box into
+            bin_name = input("============ Type the bin you want to place the box into (B,G,R) ...")
+            if bin_name == "B":
+                tutorial.goal.orientation.x = -1
+                tutorial.goal.position.x = presets["b_bin"][0]
+                tutorial.goal.position.y = presets["b_bin"][1]
+                tutorial.goal.position.z = presets["b_bin"][2]
+            elif bin_name == "G":
+                tutorial.goal.orientation.x = -1
+                tutorial.goal.position.x = presets["g_bin"][0]
+                tutorial.goal.position.y = presets["g_bin"][1]
+                tutorial.goal.position.z = presets["g_bin"][2]
+            elif bin_name == "R":
+                tutorial.goal.orientation.x = -1
+                tutorial.goal.position.x = presets["r_bin"][0]
+                tutorial.goal.position.y = presets["r_bin"][1]
+                tutorial.goal.position.z = presets["r_bin"][2]
+            else:
+                print("Invalid bin name")
+            tutorial.go_to_pose_goal()
 
-
-            input("============ Press `Enter` to detach the box from the Panda robot ...")
             tutorial.detach_box()
             tutorial.remove_box()
+            
+            tutorial.go_to_joint_state()
+
+            if red_counter == 2 and green_counter == 2 and blue_counter == 2:
+                break
+
+        print("You have completed the task!")
+        
     except rospy.ROSInterruptException:
         return
     except KeyboardInterrupt:
         return
 
-
 if __name__ == "__main__":
     main()
+
